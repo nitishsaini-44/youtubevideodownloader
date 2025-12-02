@@ -1,68 +1,101 @@
-from pytubefix import YouTube
-from pytubefix.cli import on_progress
+import yt_dlp
 import os
 
 def get_video_details(url):
     """
-    Extracts video details from the given YouTube URL.
+    Extracts video details using yt-dlp.
     """
     try:
-        yt = YouTube(url, on_progress_callback=on_progress)
-        return {
-            "title": yt.title,
-            "author": yt.author,
-            "thumbnail": yt.thumbnail_url,
-            "length": yt.length,
-            "views": yt.views,
-            "publish_date": yt.publish_date,
-            "object": yt # Return the object to avoid re-initializing
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
         }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            return {
+                "title": info.get('title'),
+                "author": info.get('uploader'),
+                "thumbnail": info.get('thumbnail'),
+                "length": info.get('duration'),
+                "views": info.get('view_count'),
+                "publish_date": info.get('upload_date'),
+                "webpage_url": info.get('webpage_url'),
+                "formats": info.get('formats', [])
+            }
     except Exception as e:
         return {"error": str(e)}
 
-def get_available_streams(yt_object):
+def get_available_streams(details):
     """
-    Returns available video and audio streams.
+    Returns available formats from the details dictionary.
+    Filters for mp4 video (progressive) and best audio.
     """
     try:
-        streams = yt_object.streams.filter(progressive=True, file_extension='mp4').order_by('resolution').desc()
-        audio_streams = yt_object.streams.filter(only_audio=True).order_by('abr').desc()
-        
+        formats = details.get("formats", [])
         options = []
-        # Video options
-        for stream in streams:
-            options.append({
-                "type": "video",
-                "resolution": stream.resolution,
-                "mime_type": stream.mime_type,
-                "itag": stream.itag,
-                "filesize": stream.filesize_approx / (1024 * 1024) # MB
-            })
-            
-        # Audio options
-        for stream in audio_streams:
-             options.append({
-                "type": "audio",
-                "resolution": stream.abr,
-                "mime_type": stream.mime_type,
-                "itag": stream.itag,
-                "filesize": stream.filesize_approx / (1024 * 1024) # MB
-            })
-            
+        
+        # Filter for video+audio (progressive) - usually 720p/360p
+        # yt-dlp marks these as having both vcodec and acodec != 'none'
+        for f in formats:
+            if f.get('vcodec') != 'none' and f.get('acodec') != 'none' and f.get('ext') == 'mp4':
+                filesize = f.get('filesize') or f.get('filesize_approx') or 0
+                options.append({
+                    "type": "video",
+                    "resolution": f.get('format_note') or f"{f.get('height')}p",
+                    "mime_type": "video/mp4",
+                    "format_id": f['format_id'],
+                    "filesize": filesize / (1024 * 1024) # MB
+                })
+        
+        # Filter for audio only (m4a/mp3)
+        for f in formats:
+            if f.get('vcodec') == 'none' and f.get('acodec') != 'none':
+                filesize = f.get('filesize') or f.get('filesize_approx') or 0
+                options.append({
+                    "type": "audio",
+                    "resolution": f"{int(f.get('abr', 0))}kbps",
+                    "mime_type": f"audio/{f.get('ext')}",
+                    "format_id": f['format_id'],
+                    "filesize": filesize / (1024 * 1024) # MB
+                })
+                
+        # Sort options (simple sort by type then resolution)
+        options.sort(key=lambda x: (x['type'], x['resolution']), reverse=True)
         return options
     except Exception as e:
         return []
 
-def download_stream(yt_object, itag, download_path="."):
+def download_stream(url, format_id, download_path="."):
     """
-    Downloads the stream with the given itag.
+    Downloads the stream with the given format_id using yt-dlp.
     Returns: (file_path, error_message)
     """
     try:
-        stream = yt_object.streams.get_by_itag(itag)
-        if stream:
-            file_path = stream.download(output_path=download_path)
-            return file_path, None
-        return None, "Stream not found"
+        ydl_opts = {
+            'format': format_id,
+            'outtmpl': f'{download_path}/%(title)s.%(ext)s',
+            'quiet': True,
+            'no_warnings': True,
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            # Download
+            ydl.download([url])
+            
+            # Get filename
+            info = ydl.extract_info(url, download=False)
+            filename = ydl.prepare_filename(info)
+            
+            # Verify file exists (sometimes extension changes)
+            if os.path.exists(filename):
+                return filename, None
+            else:
+                # Try to find the file if extension changed (e.g. mkv -> mp4)
+                # This is a basic check, might need more robust logic
+                base, _ = os.path.splitext(filename)
+                for ext in ['.mp4', '.mkv', '.webm', '.m4a', '.mp3']:
+                    if os.path.exists(base + ext):
+                        return base + ext, None
+                
+            return filename, None # Return expected name even if check failed (or handle error)
     except Exception as e:
         return None, str(e)

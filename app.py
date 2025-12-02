@@ -40,7 +40,8 @@ if st.button("Fetch Video Details"):
                 st.error(f"Error: {details['error']}")
             else:
                 st.session_state.video_details = details
-                st.session_state.streams = downloader.get_available_streams(details["object"])
+                # Pass the whole details dict now
+                st.session_state.streams = downloader.get_available_streams(details)
     else:
         st.warning("Please enter a valid URL.")
 
@@ -72,18 +73,19 @@ if st.session_state.video_details:
         options_map = {}
         for s in streams:
             label = f"{s['type'].upper()} - {s['resolution']} ({s['mime_type']}) - ~{s['filesize']:.2f} MB"
-            options_map[label] = s['itag']
+            options_map[label] = s['format_id']
         
         selected_option = st.selectbox("Select Format:", list(options_map.keys()))
         
         if st.button("Download"):
-            selected_itag = options_map[selected_option]
+            selected_format_id = options_map[selected_option]
             with st.spinner("Downloading..."):
                 # Create downloads directory if not exists
                 if not os.path.exists("downloads"):
                     os.makedirs("downloads")
                 
-                file_path, error = downloader.download_stream(details["object"], selected_itag, "downloads")
+                # Pass URL and format_id
+                file_path, error = downloader.download_stream(details["webpage_url"], selected_format_id, "downloads")
                 
                 if file_path:
                     st.success(f"Download Complete! Saved to: {file_path}")
