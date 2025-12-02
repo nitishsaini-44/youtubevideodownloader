@@ -56,12 +56,13 @@ def get_available_streams(yt_object):
 def download_stream(yt_object, itag, download_path="."):
     """
     Downloads the stream with the given itag.
+    Returns: (file_path, error_message)
     """
     try:
         stream = yt_object.streams.get_by_itag(itag)
         if stream:
             file_path = stream.download(output_path=download_path)
-            return file_path
-        return None
+            return file_path, None
+        return None, "Stream not found"
     except Exception as e:
-        return str(e)
+        return None, str(e)

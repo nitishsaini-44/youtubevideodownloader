@@ -83,21 +83,26 @@ if st.session_state.video_details:
                 if not os.path.exists("downloads"):
                     os.makedirs("downloads")
                 
-                file_path = downloader.download_stream(details["object"], selected_itag, "downloads")
+                file_path, error = downloader.download_stream(details["object"], selected_itag, "downloads")
                 
-                if file_path and not file_path.startswith("Error"):
+                if file_path:
                     st.success(f"Download Complete! Saved to: {file_path}")
                     
-                    # Read file for download button
-                    with open(file_path, "rb") as f:
-                        file_bytes = f.read()
-                        file_name = os.path.basename(file_path)
-                        st.download_button(
-                            label="Click to Save File",
-                            data=file_bytes,
-                            file_name=file_name,
-                            mime="application/octet-stream"
-                        )
+                    try:
+                        # Read file for download button
+                        with open(file_path, "rb") as f:
+                            file_bytes = f.read()
+                            file_name = os.path.basename(file_path)
+                            st.download_button(
+                                label="Click to Save File",
+                                data=file_bytes,
+                                file_name=file_name,
+                                mime="application/octet-stream"
+                            )
+                    except FileNotFoundError:
+                        st.error("File not found after download. Please try again.")
+                    except Exception as e:
+                        st.error(f"Error reading file: {e}")
                 else:
-                    st.error(f"Download failed: {file_path}")
+                    st.error(f"Download failed: {error}")
 
