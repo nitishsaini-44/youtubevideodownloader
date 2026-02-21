@@ -9,6 +9,7 @@ def get_video_details(url):
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
+            'noplaylist': True,
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -76,6 +77,7 @@ def download_stream(url, format_id, download_path="."):
             'outtmpl': f'{download_path}/%(title)s.%(ext)s',
             'quiet': True,
             'no_warnings': True,
+            'noplaylist': True,
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             # Download
